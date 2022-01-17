@@ -53,10 +53,10 @@ def main():
                             pos = "illumina"
                     if pos == "direct":
                         logging.info(f"not present, moving to {location_direct}")
-                        out.write(f"imv {path} {location_direct} # {name} not present, runfolder at {location_direct}\n")
+                        out.write(f"imv {path}/{name} {location_direct} # {name} not present, runfolder at {location_direct}\n")
                     elif pos == "illumina":
                         logging.info(f"not present, moving to {location_illumina}")
-                        out.write(f"imv {path} {location_illumina} # {name} not present, runfolder at {location_illumina}\n")
+                        out.write(f"imv {path}/{name} {location_illumina} # {name} not present, runfolder at {location_illumina}\n")
                     elif pos == "both":
                         logging.warning(f"Two run folders for run {id}")
                         out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
