@@ -62,7 +62,7 @@ def main():
                         out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
                     else:
                         logging.warning("not present, no runfolder for this run")
-                        out.write(f"# {name} not present, no runfolder for this run")
+                        out.write(f"# {name} not present, no runfolder for this run\n")
 
 
 if __name__ == "__main__":
