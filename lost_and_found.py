@@ -11,7 +11,7 @@ def rm_or_keep(landf, existing, out):
     logging.info(f"exists at {existing}")
     if existing.checksum() == landf.checksum():
         logging.info(f"has correct checksum: {landf.checksum()} == {existing.checksum()}")
-        if AVU("md5", existing.checksum) in existing.metadata():
+        if AVU("md5", existing.checksum()) in existing.metadata():
             logging.info(f"has correct checksum metadata")
             out.write(f"irm {landf.path} # md5 ok, md5 meta ok, exists as {existing.path}\n")
         else:
