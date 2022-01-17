@@ -6,6 +6,8 @@ from partisan.irods import (
 )
 import logging
 
+technologies = ["illumina", "pacbio", "ont", "sequenom", "fluidigm"]
+
 
 def rm_or_keep(landf, existing, out):
     logging.info(f"exists at {existing}")
@@ -32,37 +34,55 @@ def main():
             if type(obj) == DataObject:
                 path = obj.path
                 name = obj.name
-                # simple case - assume files are illumina and begin with run id
-                id = name.split("_")[0]
-                logging.info(f"{path}/{name}:")
-                location_direct = f"/seq/{id}"
-                location_illumina = f"/seq/illumina/runs/{id[:2]}/{id}"
-                if DataObject(f"{location_direct}/{name}").exists():
-                    rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out)
-                elif DataObject(f"{location_illumina}/{name}").exists():
-                    rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out)
-                else:
-                    logging.info(f"does not exist")
-                    pos = ""
-                    if Collection(location_direct).exists():
-                        pos = "direct"
-                    if Collection(location_illumina).exists():
-                        if pos == "direct":
-                            pos = "both"
-                        else:
-                            pos = "illumina"
-                    if pos == "direct":
-                        logging.info(f"not present, moving to {location_direct}")
-                        out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at {location_direct}\n")
-                    elif pos == "illumina":
-                        logging.info(f"not present, moving to {location_illumina}")
-                        out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at {location_illumina}\n")
-                    elif pos == "both":
-                        logging.warning(f"Two run folders for run {id}")
-                        out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
+                technology = None
+                for t in technologies:
+                    if t in str(path).lower():
+                        technology = t
+                if technology == "illumina" or technology is None:
+                    cont = True
+                    # simple case - assume files are illumina and begin with run id
+                    id = name.split("_")[0]
+                    logging.info(f"{path}/{name}:")
+                    location_direct = f"/seq/{id}"
+                    location_illumina = f"/seq/illumina/runs/{id[:2]}/{id}"
+                    if DataObject(f"{location_direct}/{name}").exists():
+                        rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out)
+                    elif DataObject(f"{location_illumina}/{name}").exists():
+                        rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out)
                     else:
-                        logging.warning("not present, no runfolder for this run")
-                        out.write(f"# {name} not present, no runfolder for this run\n")
+                        logging.info(f"does not exist")
+                        pos = ""
+                        if Collection(location_direct).exists():
+                            pos = "direct"
+                        if Collection(location_illumina).exists():
+                            if pos == "direct":
+                                pos = "both"
+                            else:
+                                pos = "illumina"
+                        if pos == "direct":
+                            logging.info(f"not present, moving to {location_direct}")
+                            out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at {location_direct}\n")
+                        elif pos == "illumina":
+                            logging.info(f"not present, moving to {location_illumina}")
+                            out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at {location_illumina}\n")
+                        elif pos == "both":
+                            logging.warning(f"Two run folders for run {id}")
+                            out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
+                        else:
+                            logging.info("no illumina runfolder for this run")
+                            cont = False
+                    if cont:
+                        continue
+                if technology == "pacbio" or technology is None:
+                    ...
+                if technology == "ont" or technology is None:
+                    ...
+                if technology == "sequenom" or technology is None:
+                    ...
+                if technology == "fluidigm" or technology is None:
+                    ...
+
+
 
 
 if __name__ == "__main__":
