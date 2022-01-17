@@ -35,12 +35,12 @@ def main():
                 # simple case - assume files are illumina and begin with run id
                 id = name.split("_")[0]
                 logging.info(f"{path}/{name}:")
-                location_direct = f"/seq/{id}/"
-                location_illumina = f"/seq/illumina/runs/{id[:2]}/{id}/"
-                if DataObject(f"{location_direct}{name}").exists():
-                    rm_or_keep(obj, DataObject(f"{location_direct}{name}"), out)
-                elif DataObject(f"{location_illumina}{name}").exists():
-                    rm_or_keep(obj, DataObject(f"{location_illumina}{name}"), out)
+                location_direct = f"/seq/{id}"
+                location_illumina = f"/seq/illumina/runs/{id[:2]}/{id}"
+                if DataObject(f"{location_direct}/{name}").exists():
+                    rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out)
+                elif DataObject(f"{location_illumina}/{name}").exists():
+                    rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out)
                 else:
                     logging.info(f"does not exist")
                     pos = ""
