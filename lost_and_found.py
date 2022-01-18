@@ -46,11 +46,45 @@ def non_illumina(technology, obj):
 def main():
     logging.basicConfig(filename='orphan_files.log', encoding='utf-8', level=logging.INFO)
     lost_and_found = Collection("/seq/lostandfound")
+    # check for premade object list
+    objects = []
+    premade = False
+    try:
+        with open("objects", "r") as object_list:
+            objects = [DataObject(obj) for obj in object_list.readlines()]
+        premade = True
+    except FileNotFoundError:
+        objects = lost_and_found.contents(recurse=True)
 
-    for obj in lost_and_found.contents(recurse=True):
+    for obj in objects:
         if type(obj) == DataObject:
             path = obj.path
             name = obj.name
+            if not premade:
+                # compile list of data objects to avoid rerunning recursive contents
+                with open("objects", "a") as object_list:
+                    object_list.write(f"{path}/{name}")
+            logging.info(f"{path}/{name}:")
+            found = False
+            # path may be exactly correct except for lost and found structure
+            split_path = path.split("/")[3:]
+            actual_obj = DataObject(f"/seq/{'/'.join(split_path)}/{name}")
+            if actual_obj.exists():
+                with open("resolve_orphaned_files.sh", "a") as out:
+                    rm_or_keep(obj, actual_obj, out)
+                    found = True
+            else:
+                depth = len(split_path)
+                for i in range(depth, 0, -1):
+                    coll = Collection(f"/seq/{'/'.join(split_path[:i])}")
+                    if coll.exists():
+                        logging.info(f"moving to {coll}")
+                        out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
+                        found = True
+                        break
+            if found:
+                continue
+
             technology = None
             for t in technologies:
                 if t in str(path).lower():
@@ -58,7 +92,6 @@ def main():
             if technology == "illumina" or technology is None:
                 found = True
                 id = name.split("_")[0]
-                logging.info(f"{path}/{name}:")
                 location_direct = f"/seq/{id}"
                 location_illumina = f"/seq/illumina/runs/{id[:2]}/{id}"
                 with open("resolve_orphaned_files.sh", "a") as out:
@@ -88,8 +121,8 @@ def main():
                         else:
                             logging.info("no illumina runfolder for this run")
                             found = False
-                if found:
-                    continue
+            if found:
+                continue
 
             for t in technologies:
                 if t == technology:
@@ -97,7 +130,7 @@ def main():
                         continue
 
             # if the file was not found, and there was no runfolder
-            with open ("still_lost.log", "a") as lost:
+            with open("still_lost.log", "a") as lost:
                 lost.write(f"A location for {path}/{name} has not been found")
 
 
