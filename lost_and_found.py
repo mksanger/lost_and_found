@@ -6,7 +6,6 @@ from partisan.irods import (
 )
 import logging
 
-technologies = ["illumina", "pacbio", "ont", "sequenom", "fluidigm"]
 
 
 def rm_or_keep(landf, existing, out):
@@ -22,26 +21,6 @@ def rm_or_keep(landf, existing, out):
     else:
         logging.warning(f"has incorrect checksum: {landf.checksum()} != {existing.checksum()}")
         out.write(f"# md5 NOT OK, exists as {existing.path}/{existing.name}\n")
-
-
-def non_illumina(technology, obj):
-    path = obj.path
-    name = obj.name
-    real_path = f"/seq/{technology}{str(path).split(technology)[1]}"
-    match = DataObject(f"{real_path}/{name}")
-    with open("resolve_orphaned_files.sh", "a") as out:
-        if match.exists():
-            rm_or_keep(obj, match, out)
-        else:
-            logging.info("does not exist")
-            if Collection(real_path).exists():
-                logging.info(f"moving to {real_path}/{name}")
-                out.write(f"imv {path}/{name} {real_path}/{name} # {name} not present, runfolder at {real_path}\n")
-                return True
-            else:
-                logging.info(f"no {technology} runfolder for this run")
-                return False
-
 
 def main():
     logging.basicConfig(filename='orphan_files.log', encoding='utf-8', level=logging.INFO)
@@ -85,54 +64,44 @@ def main():
                             found = True
                             break
             except IndexError:
-                pass  # some objects are not as deep in collections  as others
+                pass  # some objects are not as deep in collections as others
             if found:
                 continue
 
-
-            technology = None
-            for t in technologies:
-                if t in str(path).lower():
-                    technology = t
-            if technology == "illumina" or technology is None:
-                found = True
-                id = name.split("_")[0]
-                location_direct = f"/seq/{id}"
-                location_illumina = f"/seq/illumina/runs/{id[:2]}/{id}"
-                with open("resolve_orphaned_files.sh", "a") as out:
-                    if DataObject(f"{location_direct}/{name}").exists():
-                        rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out)
-                    elif DataObject(f"{location_illumina}/{name}").exists():
-                        rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out)
-                    else:
-                        logging.info(f"does not exist")
-                        pos = ""
-                        if Collection(location_direct).exists():
-                            pos = "direct"
-                        if Collection(location_illumina).exists():
-                            if pos == "direct":
-                                pos = "both"
-                            else:
-                                pos = "illumina"
+            # Assume illumina if path is not explicitly correct - only this has been directly seen so far
+            found = True
+            runid = name.split("_")[0]
+            location_direct = f"/seq/{runid}"
+            location_illumina = f"/seq/illumina/runs/{runid[:2]}/{runid}"
+            with open("resolve_orphaned_files.sh", "a") as out:
+                if DataObject(f"{location_direct}/{name}").exists():
+                    rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out)
+                elif DataObject(f"{location_illumina}/{name}").exists():
+                    rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out)
+                else:
+                    logging.info(f"does not exist")
+                    pos = ""
+                    if Collection(location_direct).exists():
+                        pos = "direct"
+                    if Collection(location_illumina).exists():
                         if pos == "direct":
-                            logging.info(f"moving to {location_direct}")
-                            out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at {location_direct}\n")
-                        elif pos == "illumina":
-                            logging.info(f"moving to {location_illumina}")
-                            out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at {location_illumina}\n")
-                        elif pos == "both":
-                            logging.warning(f"Two run folders for run {id}")
-                            out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
+                            pos = "both"
                         else:
-                            logging.info("no illumina runfolder for this run")
-                            found = False
+                            pos = "illumina"
+                    if pos == "direct":
+                        logging.info(f"moving to {location_direct}")
+                        out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at {location_direct}\n")
+                    elif pos == "illumina":
+                        logging.info(f"moving to {location_illumina}")
+                        out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at {location_illumina}\n")
+                    elif pos == "both":
+                        logging.warning(f"Two run folders for run {runid}")
+                        out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
+                    else:
+                        logging.info("no illumina runfolder for this run")
+                        found = False
             if found:
                 continue
-
-            for t in technologies:
-                if t == technology:
-                    if non_illumina(t, obj):
-                        continue
 
             # if the file was not found, and there was no runfolder
             with open("still_lost.log", "a") as lost:
