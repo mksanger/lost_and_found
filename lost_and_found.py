@@ -67,23 +67,28 @@ def main():
             logging.info(f"{path}/{name}:")
             found = False
             # path may be exactly correct except for lost and found structure
-            split_path = path.split("/")[3:]
-            actual_obj = DataObject(f"/seq/{'/'.join(split_path)}/{name}")
-            if actual_obj.exists():
-                with open("resolve_orphaned_files.sh", "a") as out:
-                    rm_or_keep(obj, actual_obj, out)
-                    found = True
-            else:
-                depth = len(split_path)
-                for i in range(depth, 0, -1):
-                    coll = Collection(f"/seq/{'/'.join(split_path[:i])}")
-                    if coll.exists():
-                        logging.info(f"moving to {coll}")
-                        out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
+            try:
+                split_path = str(path).split("/")[4:]
+                actual_obj = DataObject(f"/seq/{'/'.join(split_path)}/{name}")
+                if actual_obj.exists():
+                    with open("resolve_orphaned_files.sh", "a") as out:
+                        rm_or_keep(obj, actual_obj, out)
                         found = True
-                        break
+                else:
+                    depth = len(split_path)
+                    for i in range(depth, 0, -1):
+                        coll = Collection(f"/seq/{'/'.join(split_path[:i])}")
+                        if coll.exists():
+                            logging.info(f"moving to {coll}")
+                            with open("resolve_orphaned_files.sh", "a") as out:
+                                out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
+                            found = True
+                            break
+            except IndexError:
+                pass  # some objects are not as deep in collections  as others
             if found:
                 continue
+
 
             technology = None
             for t in technologies:
