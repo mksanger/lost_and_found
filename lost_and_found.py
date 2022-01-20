@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
+
+import logging
+import structlog
+
+logging.basicConfig(level=logging.INFO, filename="orphan_files.log", encoding="utf-8")
+
+structlog.configure(
+    logger_factory=structlog.stdlib.LoggerFactory()
+
+)
+
+log = structlog.get_logger(__file__)
+
 from partisan.irods import (
     Collection,
     DataObject,
     AVU,
     query_metadata
 )
-import logging
+
 
 object_file = "objects"
 resolve = "resolve_orphaned_files.sh"
@@ -13,22 +26,22 @@ keptfiles = "kept_files"
 
 
 def rm_or_keep(landf, existing, out, kept):
-    logging.info(f"exists at {existing}")
+    log.info(f"exists at {existing}")
     if existing.checksum() == landf.checksum():
-        logging.info(f"has correct checksum: {landf.checksum()} == {existing.checksum()}")
+        log.info(f"has correct checksum: {landf.checksum()} == {existing.checksum()}")
         if AVU("md5", existing.checksum()) in existing.metadata():
-            logging.info(f"has correct checksum metadata")
+            log.info(f"has correct checksum metadata")
             out.write(f"irm {landf.path}/{landf.name} # md5 ok, md5 meta ok, exists as {existing.path}/{existing.name}\n")
         else:
-            logging.warning(f"does not have correct checksum metadata")
+            log.warning(f"does not have correct checksum metadata")
             kept.write(f"{landf.path}/{landf.name} kept due to incorrect md5 metadata on the current file\n")
     else:
-        logging.warning(f"has incorrect checksum: {landf.checksum()} != {existing.checksum()}")
+        log.warning(f"has incorrect checksum: {landf.checksum()} != {existing.checksum()}")
         kept.write(f"{landf.path}/{landf.name} kept due to difference in checksum compared with the current file\n")
 
 
 def main():
-    logging.basicConfig(filename='orphan_files.log', encoding='utf-8', level=logging.INFO)
+    log.basicConfig(filename='orphan_files.log', encoding='utf-8', level=log.INFO)
     lost_and_found = Collection("/seq/lostandfound")
     # check for premade object list
     objects = []
@@ -48,7 +61,7 @@ def main():
                     # compile list of data objects to avoid rerunning recursive contents
                     with open("objects", "a") as object_list:
                         object_list.write(f"{path}/{name}")
-                logging.info(f"{path}/{name}:")
+                log.info(f"{path}/{name}:")
                 found = False
                 # path may be exactly correct except for lost and found structure
                 try:
@@ -60,7 +73,7 @@ def main():
                     else:
                         coll = Collection(f"/seq/{'/'.join(split_path)}")
                         if coll.exists():
-                            logging.info(f"moving to {coll.path}/{name}")
+                            log.info(f"moving to {coll.path}/{name}")
                             out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
                             found = True
                             break
@@ -80,7 +93,7 @@ def main():
                     elif DataObject(f"{location_illumina}/{name}").exists():
                         rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out, kept)
                     else:
-                        logging.info(f"does not exist")
+                        log.info(f"does not exist")
                         pos = ""
                         if Collection(location_direct).exists():
                             pos = "direct"
@@ -90,43 +103,43 @@ def main():
                             else:
                                 pos = "illumina"
                         if pos == "direct":
-                            logging.info(f"moving to {location_direct}")
+                            log.info(f"moving to {location_direct}")
                             out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at "
                                       f"{location_direct}\n")
                         elif pos == "illumina":
-                            logging.info(f"moving to {location_illumina}")
+                            log.info(f"moving to {location_illumina}")
                             out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at"
                                       f" {location_illumina}\n")
                         elif pos == "both":
-                            logging.warning(f"Two run folders for run {runid}")
+                            log.warning(f"Two run folders for run {runid}")
                             kept.write(f"{path}/{name} kept, two possible runfolders for this run, {location_direct} "
                                        f"and {location_illumina}\n")
                         else:
-                            logging.info("no illumina runfolder for this run")
+                            log.info("no illumina runfolder for this run")
                             found = False
                 if found:
                     continue
 
                 # find objects with the same md5
-                logging.info("searching by md5 metadata")
+                log.info("searching by md5 metadata")
                 matches = query_metadata(AVU("md5", obj.checksum()), zone='/seq', collection=False)
                 complete_matches = []
                 for match in matches:
                     if match.name == obj.name:
-                        logging.info(f"{match.path}/{match.name} has correct name")
+                        log.info(f"{match.path}/{match.name} has correct name")
                         if match.checksum() == obj.checksum():
-                            logging.info("match has correct checksum")
+                            log.info("match has correct checksum")
                             complete_matches.append(match)
                         else:
-                            logging.info("match has incorrect checksum")
+                            log.info("match has incorrect checksum")
                 if len(complete_matches) > 0:
-                    logging.info(f"At least one complete match, file can be regenerated if needed elsewhere")
+                    log.info(f"At least one complete match, file can be regenerated if needed elsewhere")
                     out.write(f"irm {path}/{name} # md5 ok, md5 meta ok, exists as {complete_matches[0].path}/"
                               f"{complete_matches[0].name}\n")
                     found = True
 
                 else:
-                    logging.info(f"No complete matches, keeping file")
+                    log.info(f"No complete matches, keeping file")
                     kept.write(f"{path}/{name} kept because a location has not been found\n")
 
 
