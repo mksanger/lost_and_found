@@ -2,13 +2,17 @@
 from partisan.irods import (
     Collection,
     DataObject,
-    AVU
+    AVU,
+    query_metadata
 )
 import logging
 
+object_file = "objects"
+resolve = "resolve_orphaned_files.sh"
+keptfiles = "kept_files"
 
 
-def rm_or_keep(landf, existing, out):
+def rm_or_keep(landf, existing, out, kept):
     logging.info(f"exists at {existing}")
     if existing.checksum() == landf.checksum():
         logging.info(f"has correct checksum: {landf.checksum()} == {existing.checksum()}")
@@ -17,10 +21,11 @@ def rm_or_keep(landf, existing, out):
             out.write(f"irm {landf.path}/{landf.name} # md5 ok, md5 meta ok, exists as {existing.path}/{existing.name}\n")
         else:
             logging.warning(f"does not have correct checksum metadata")
-            out.write(f"# md5 ok, md5 meta NOT OK, exists as {existing.path}/{existing.name}\n")
+            kept.write(f"{landf.path}/{landf.name} kept due to incorrect md5 metadata on the current file\n")
     else:
         logging.warning(f"has incorrect checksum: {landf.checksum()} != {existing.checksum()}")
-        out.write(f"# md5 NOT OK, exists as {existing.path}/{existing.name}\n")
+        kept.write(f"{landf.path}/{landf.name} kept due to difference in checksum compared with the current file\n")
+
 
 def main():
     logging.basicConfig(filename='orphan_files.log', encoding='utf-8', level=logging.INFO)
@@ -34,78 +39,95 @@ def main():
         premade = True
     except FileNotFoundError:
         objects = lost_and_found.contents(recurse=True)
-
-    for obj in objects:
-        if type(obj) == DataObject:
-            path = obj.path
-            name = obj.name
-            if not premade:
-                # compile list of data objects to avoid rerunning recursive contents
-                with open("objects", "a") as object_list:
-                    object_list.write(f"{path}/{name}")
-            logging.info(f"{path}/{name}:")
-            found = False
-            # path may be exactly correct except for lost and found structure
-            try:
-                split_path = str(path).split("/")[4:]
-                actual_obj = DataObject(f"/seq/{'/'.join(split_path)}/{name}")
-                if actual_obj.exists():
-                    with open("resolve_orphaned_files.sh", "a") as out:
-                        rm_or_keep(obj, actual_obj, out)
+    with open(resolve, "a") as out, open(keptfiles, "a") as kept:
+        for obj in objects:
+            if type(obj) == DataObject:
+                path = obj.path
+                name = obj.name
+                if not premade:
+                    # compile list of data objects to avoid rerunning recursive contents
+                    with open("objects", "a") as object_list:
+                        object_list.write(f"{path}/{name}")
+                logging.info(f"{path}/{name}:")
+                found = False
+                # path may be exactly correct except for lost and found structure
+                try:
+                    split_path = str(path).split("/")[4:]
+                    actual_obj = DataObject(f"/seq/{'/'.join(split_path)}/{name}")
+                    if actual_obj.exists():
+                        rm_or_keep(obj, actual_obj, out, kept)
                         found = True
-                else:
-                    depth = len(split_path)
-                    for i in range(depth, 0, -1):
-                        coll = Collection(f"/seq/{'/'.join(split_path[:i])}")
+                    else:
+                        coll = Collection(f"/seq/{'/'.join(split_path)}")
                         if coll.exists():
-                            logging.info(f"moving to {coll}")
-                            with open("resolve_orphaned_files.sh", "a") as out:
-                                out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
+                            logging.info(f"moving to {coll.path}/{name}")
+                            out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
                             found = True
                             break
-            except IndexError:
-                pass  # some objects are not as deep in collections as others
-            if found:
-                continue
+                except IndexError:
+                    pass  # some objects are not as deep in collections as others
+                if found:
+                    continue
 
-            # Assume illumina if path is not explicitly correct - only this has been directly seen so far
-            found = True
-            runid = name.split("_")[0]
-            location_direct = f"/seq/{runid}"
-            location_illumina = f"/seq/illumina/runs/{runid[:2]}/{runid}"
-            with open("resolve_orphaned_files.sh", "a") as out:
-                if DataObject(f"{location_direct}/{name}").exists():
-                    rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out)
-                elif DataObject(f"{location_illumina}/{name}").exists():
-                    rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out)
-                else:
-                    logging.info(f"does not exist")
-                    pos = ""
-                    if Collection(location_direct).exists():
-                        pos = "direct"
-                    if Collection(location_illumina).exists():
-                        if pos == "direct":
-                            pos = "both"
-                        else:
-                            pos = "illumina"
-                    if pos == "direct":
-                        logging.info(f"moving to {location_direct}")
-                        out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at {location_direct}\n")
-                    elif pos == "illumina":
-                        logging.info(f"moving to {location_illumina}")
-                        out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at {location_illumina}\n")
-                    elif pos == "both":
-                        logging.warning(f"Two run folders for run {runid}")
-                        out.write(f"# {name} not present, two possible runfolders for this run, {location_direct} and {location_illumina}\n")
+                # try
+                found = True
+                runid = name.split("_")[0]
+                if runid[0].isdigit():
+                    location_direct = f"/seq/{runid}"
+                    location_illumina = f"/seq/illumina/runs/{runid[:2]}/{runid}"
+                    if DataObject(f"{location_direct}/{name}").exists():
+                        rm_or_keep(obj, DataObject(f"{location_direct}/{name}"), out, kept)
+                    elif DataObject(f"{location_illumina}/{name}").exists():
+                        rm_or_keep(obj, DataObject(f"{location_illumina}/{name}"), out, kept)
                     else:
-                        logging.info("no illumina runfolder for this run")
-                        found = False
-            if found:
-                continue
+                        logging.info(f"does not exist")
+                        pos = ""
+                        if Collection(location_direct).exists():
+                            pos = "direct"
+                        if Collection(location_illumina).exists():
+                            if pos == "direct":
+                                pos = "both"
+                            else:
+                                pos = "illumina"
+                        if pos == "direct":
+                            logging.info(f"moving to {location_direct}")
+                            out.write(f"imv {path}/{name} {location_direct}/{name} # {name} not present, runfolder at "
+                                      f"{location_direct}\n")
+                        elif pos == "illumina":
+                            logging.info(f"moving to {location_illumina}")
+                            out.write(f"imv {path}/{name} {location_illumina}/{name} # {name} not present, runfolder at"
+                                      f" {location_illumina}\n")
+                        elif pos == "both":
+                            logging.warning(f"Two run folders for run {runid}")
+                            kept.write(f"{path}/{name} kept, two possible runfolders for this run, {location_direct} "
+                                       f"and {location_illumina}\n")
+                        else:
+                            logging.info("no illumina runfolder for this run")
+                            found = False
+                if found:
+                    continue
 
-            # if the file was not found, and there was no runfolder
-            with open("still_lost.log", "a") as lost:
-                lost.write(f"A location for {path}/{name} has not been found")
+                # find objects with the same md5
+                logging.info("searching by md5 metadata")
+                matches = query_metadata(AVU("md5", obj.checksum()), zone='/seq', collection=False)
+                complete_matches = []
+                for match in matches:
+                    if match.name == obj.name:
+                        logging.info(f"{match.path}/{match.name} has correct name")
+                        if match.checksum() == obj.checksum():
+                            logging.info("match has correct checksum")
+                            complete_matches.append(match)
+                        else:
+                            logging.info("match has incorrect checksum")
+                if len(complete_matches) > 0:
+                    logging.info(f"At least one complete match, file can be regenerated if needed elsewhere")
+                    out.write(f"irm {path}/{name} # md5 ok, md5 meta ok, exists as {complete_matches[0].path}/"
+                              f"{complete_matches[0].name}\n")
+                    found = True
+
+                else:
+                    logging.info(f"No complete matches, keeping file")
+                    kept.write(f"{path}/{name} kept because a location has not been found\n")
 
 
 if __name__ == "__main__":
