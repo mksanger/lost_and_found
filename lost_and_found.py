@@ -7,7 +7,6 @@ logging.basicConfig(level=logging.INFO, filename="orphan_files.log", encoding="u
 
 structlog.configure(
     logger_factory=structlog.stdlib.LoggerFactory()
-
 )
 
 log = structlog.get_logger(__file__)
@@ -41,7 +40,6 @@ def rm_or_keep(landf, existing, out, kept):
 
 
 def main():
-    log.basicConfig(filename='orphan_files.log', encoding='utf-8', level=log.INFO)
     lost_and_found = Collection("/seq/lostandfound")
     # check for premade object list
     objects = []
@@ -60,7 +58,7 @@ def main():
                 if not premade:
                     # compile list of data objects to avoid rerunning recursive contents
                     with open("objects", "a") as object_list:
-                        object_list.write(f"{path}/{name}")
+                        object_list.write(f"{path}/{name}\n")
                 log.info(f"{path}/{name}:")
                 found = False
                 # path may be exactly correct except for lost and found structure
@@ -82,7 +80,6 @@ def main():
                 if found:
                     continue
 
-                # try
                 found = True
                 runid = name.split("_")[0]
                 if runid[0].isdigit():
