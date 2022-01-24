@@ -74,7 +74,6 @@ def main():
                             log.info(f"moving to {coll.path}/{name}")
                             out.write(f"imv {path}/{name} {coll}/{name} # {name} not present, collection at {coll}\n")
                             found = True
-                            break
                 except IndexError:
                     pass  # some objects are not as deep in collections as others
                 if found:
@@ -142,4 +141,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
