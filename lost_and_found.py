@@ -49,7 +49,7 @@ def main():
             objects = [DataObject(obj) for obj in object_list.readlines()]
         premade = True
     except FileNotFoundError:
-        objects = lost_and_found.contents(recurse=True)
+        objects = lost_and_found.iter_contents()
     with open(resolve, "a") as out, open(keptfiles, "a") as kept:
         for obj in objects:
             if type(obj) == DataObject:
