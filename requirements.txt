@@ -1,0 +1,2 @@
+structlog==21.4.0
+partisan==0.1
